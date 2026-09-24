@@ -1,0 +1,16 @@
+name: Trigger Stock Data Fetch
+
+on:
+  schedule:
+    # 10:01 AM, 2:00 PM, and 6:00 PM Eastern Time (configured in UTC)
+    - cron: "1 14,18,22 * * 1-5"
+  workflow_dispatch: # Allows you to manually trigger it from GitHub anytime
+
+jobs:
+  run-cron:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Hit Vercel Cron API Route
+        run: |
+          curl -X GET "https://stock-quant-system.vercel.app/api/cron/fetch-data" \
+          -H "Authorization: Bearer ${{ secrets.CRON_SECRET }}"
