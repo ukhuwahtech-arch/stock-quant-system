@@ -32,8 +32,10 @@ interface TradeRecord {
 // Helper to get display date in "24 Sep 26" format from a YYYY-MM-DD string
 function formatDisplayDate(dateStr: string): string {
   if (!dateStr) return "";
-  const [year, month, day] = dateStr.split("-");
-  const d = new Date(parseInt(year), parseInt(month) - 1, parseInt(day));
+  const parts = dateStr.split("-");
+  if (parts.length < 3) return dateStr;
+  const [year, month, day] = parts as [string, string, string];
+  const d = new Date(parseInt(year, 10), parseInt(month, 10) - 1, parseInt(day, 10));
   if (isNaN(d.getTime())) return dateStr;
   const dayStr = String(d.getDate()).padStart(2, "0");
   const monthStr = d.toLocaleDateString("en-US", { month: "short" });
@@ -44,8 +46,10 @@ function formatDisplayDate(dateStr: string): string {
 // Helper to get day of the week (e.g., "Monday", "Thursday") from a YYYY-MM-DD string
 function formatDayOfWeek(dateStr: string): string {
   if (!dateStr) return "";
-  const [year, month, day] = dateStr.split("-");
-  const d = new Date(parseInt(year), parseInt(month) - 1, parseInt(day));
+  const parts = dateStr.split("-");
+  if (parts.length < 3) return "Session";
+  const [year, month, day] = parts as [string, string, string];
+  const d = new Date(parseInt(year, 10), parseInt(month, 10) - 1, parseInt(day, 10));
   if (isNaN(d.getTime())) return "Session";
   return d.toLocaleDateString("en-US", { weekday: "long" });
 }
@@ -77,7 +81,7 @@ function getLastBusinessDays(count: number): string[] {
 // Robust hit day formatter supporting day numbers (1, 2, 3...) or dates
 function formatHitDay(evalDate: string, hitDayVal: any): string {
   if (hitDayVal === null || hitDayVal === undefined || hitDayVal === "") return "—";
-  const valStr = String(hitDayVal).trim();
+  const valStr = String(hitDayVal ?? "").trim();
 
   if (/^\d+$/.test(valStr)) {
     const dayNum = parseInt(valStr, 10);
@@ -87,12 +91,12 @@ function formatHitDay(evalDate: string, hitDayVal: any): string {
 
   const match = valStr.match(/(\d+)/);
   if (match && !valStr.includes("-")) {
-    const dayNum = parseInt(match[1], 10);
+    const dayNum = parseInt(match[1] ?? "0", 10);
     if (dayNum <= 1) return "Same Day";
     return `${dayNum} Days`;
   }
 
-  const d1 = new Date(evalDate);
+  const d1 = new Date(evalDate ?? "");
   const d2 = new Date(valStr);
   if (!isNaN(d1.getTime()) && !isNaN(d2.getTime())) {
     const diffTime = d2.getTime() - d1.getTime();
@@ -177,7 +181,7 @@ export default function DashboardPage() {
     fetchTrades();
 
     // Set default active tab to today's business date automatically on load
-    if (!activeTab) {
+    if (!activeTab && dynamicTradingDates[0]) {
       setActiveTab(dynamicTradingDates[0]);
     }
   }, []);
@@ -203,9 +207,10 @@ export default function DashboardPage() {
   dayTrades.forEach((trade) => {
     const normalizedTier = (trade.tier || "").trim();
     const score = tierPriority[normalizedTier] || 0;
-    const existing = tickerBestTierMap.get(trade.ticker);
+    const tickerKey = trade.ticker ?? "";
+    const existing = tickerBestTierMap.get(tickerKey);
     if (!existing || score > existing.score) {
-      tickerBestTierMap.set(trade.ticker, { tier: normalizedTier, score, trade });
+      tickerBestTierMap.set(tickerKey, { tier: normalizedTier, score, trade });
     }
   });
 
@@ -216,13 +221,13 @@ export default function DashboardPage() {
   const filteredTrades = dayTrades.filter((trade) => {
     const normalizedTradeTier = (trade.tier || "").trim();
     const matchesTier = activeTierTab === "ALL" || normalizedTradeTier === activeTierTab;
-    const matchesSearch = trade.ticker.toLowerCase().includes(searchTerm.toLowerCase());
+    const matchesSearch = (trade.ticker ?? "").toLowerCase().includes((searchTerm ?? "").toLowerCase());
     return matchesTier && matchesSearch;
   });
 
   const totalSignals = filteredTrades.length;
   const totalWins = filteredTrades.filter((t) => {
-    const statusLower = t.status?.toLowerCase() || "";
+    const statusLower = (t.status ?? "").toLowerCase();
     return statusLower.includes("win") || statusLower.includes("hit");
   }).length;
   const winRate = totalSignals > 0 ? ((totalWins / totalSignals) * 100).toFixed(1) : "0.0";
@@ -269,10 +274,10 @@ export default function DashboardPage() {
         ) : topStocks.length > 0 ? (
           <div className={`grid grid-cols-1 sm:grid-cols-${Math.min(topStocks.length, 3)} gap-4`}>
             {topStocks.map(({ tier, trade }, index) => {
-              const cleanTicker = trade.ticker?.replace(/(\d+%)$/, "").trim() || "";
-              const targetPrice = trade.target_price || trade.entry_price * 1.01;
-              const profitVal = trade.profit_dollar || (targetPrice - trade.entry_price);
-              const statusLower = trade.status?.toLowerCase() || "";
+              const cleanTicker = (trade.ticker ?? "").replace(/(\d+%)$/, "").trim();
+              const targetPrice = trade.target_price ?? trade.entry_price * 1.01;
+              const profitVal = trade.profit_dollar ?? (targetPrice - trade.entry_price);
+              const statusLower = (trade.status ?? "").toLowerCase();
               const isHit = statusLower.includes("win") || statusLower.includes("hit");
 
               return (
@@ -425,11 +430,11 @@ export default function DashboardPage() {
               </thead>
               <tbody className="divide-y divide-zinc-800/60">
                 {filteredTrades.map((trade) => {
-                  const targetPrice = trade.target_price || trade.entry_price * 1.01;
-                  const profitVal = trade.profit_dollar || (targetPrice - trade.entry_price);
-                  const statusLower = trade.status?.toLowerCase() || "";
+                  const targetPrice = trade.target_price ?? trade.entry_price * 1.01;
+                  const profitVal = trade.profit_dollar ?? (targetPrice - trade.entry_price);
+                  const statusLower = (trade.status ?? "").toLowerCase();
                   const isHit = statusLower.includes("win") || statusLower.includes("hit");
-                  const cleanTicker = trade.ticker?.replace(/(\d+%)$/, "").trim() || "";
+                  const cleanTicker = (trade.ticker ?? "").replace(/(\d+%)$/, "").trim();
                   const cleanOutcome = cleanOutcomeText(trade.status);
                   const calculatedHitDay = formatHitDay(trade.evaluation_date, trade.hit_day);
                   const displayTier = (trade.tier || "").trim();
