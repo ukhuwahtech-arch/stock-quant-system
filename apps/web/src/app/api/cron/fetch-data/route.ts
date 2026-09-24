@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
-import yahooFinance from 'yahoo-finance2';
+import YahooFinance from 'yahoo-finance2';
 
 // Initialize Supabase admin client (using service role key to bypass RLS for automated backend writes)
 const supabase = createClient(
@@ -23,9 +23,11 @@ export async function GET(request: Request) {
   const today = new Date().toISOString().split('T')[0];
   const results = [];
 
+  // Instantiate YahooFinance class per v3/v4 requirements
+  const yahooFinance = new YahooFinance();
+
   try {
     for (const ticker of tickers) {
-      // Fetch daily quote using the default yahooFinance instance safely with any cast
       const quote: any = await yahooFinance.quote(ticker);
       
       if (!quote) {
@@ -38,7 +40,6 @@ export async function GET(request: Request) {
       const profitDollar = Number((targetPrice - entryPrice).toFixed(2));
       const highPrice = quote.regularMarketDayHigh || entryPrice;
       
-      // Determine status based on whether high price hit the +1% target
       const status = highPrice >= targetPrice ? "HIT" : "OPEN / ACTIVE";
       const hitDay = status === "HIT" ? today : "—";
       const hitTime = status === "HIT" ? new Date().toTimeString().split(' ')[0] : "—";
@@ -89,7 +90,6 @@ export async function GET(request: Request) {
         hit_day: hitDay,
       };
 
-      // Upsert into Supabase:
       const { error } = await supabase
         .from("stock_gate_results")
         .upsert(payload, { onConflict: "evaluation_date,ticker,tier" });
