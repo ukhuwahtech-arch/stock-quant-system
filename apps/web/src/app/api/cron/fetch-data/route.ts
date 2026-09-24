@@ -25,7 +25,7 @@ export async function GET(request: Request) {
 
   try {
     for (const ticker of tickers) {
-      // Fetch daily quote from Yahoo Finance with explicit any cast to prevent type errors
+      // Fetch daily quote using the default yahooFinance instance safely with any cast
       const quote: any = await yahooFinance.quote(ticker);
       
       if (!quote) {
@@ -47,7 +47,7 @@ export async function GET(request: Request) {
       const payload = {
         evaluation_date: today,
         ticker: ticker,
-        tier: "75%", // Default tier or calculation logic
+        tier: "75%",
         gate_1_score: 10,
         gate_1_prog: 71.4,
         gate_1_text: "Opening Gap & VWAP Spread",
@@ -90,8 +90,6 @@ export async function GET(request: Request) {
       };
 
       // Upsert into Supabase:
-      // If the row for today + ticker + tier already exists (e.g. at 2:00 PM or 6:00 PM), 
-      // it cleanly overwrites/updates it with the latest prices without making duplicate rows.
       const { error } = await supabase
         .from("stock_gate_results")
         .upsert(payload, { onConflict: "evaluation_date,ticker,tier" });
