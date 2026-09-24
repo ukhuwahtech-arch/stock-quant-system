@@ -1,0 +1,8 @@
+{
+  "crons": [
+    {
+      "path": "/api/cron/fetch-data",
+      "schedule": "1 14,18,22 * * 1-5"
+    }
+  ]
+}
