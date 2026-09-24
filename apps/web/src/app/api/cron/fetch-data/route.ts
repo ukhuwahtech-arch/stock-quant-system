@@ -20,7 +20,14 @@ export async function GET(request: Request) {
     return new Response('Unauthorized', { status: 401 });
   }
 
-  const today = new Date().toISOString().split('T')[0];
+  // Get current local date (ensures evaluation_date matches today: 2026-09-25)
+  const today = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Asia/Kuala_Lumpur',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit'
+  }).format(new Date());
+
   const results = [];
 
   // Instantiate YahooFinance class per v3/v4 requirements
