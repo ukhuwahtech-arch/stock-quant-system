@@ -10,16 +10,6 @@ interface TradeRecord {
   evaluation_date: string;
   ticker: string;
   tier: string;
-  gate_1_score: number;
-  gate_2_score: number;
-  gate_3_score: number;
-  gate_4_score: number;
-  gate_5_score: number;
-  gate_6_score: number;
-  gate_7_score: number;
-  gate_8_score: number;
-  gate_9_score: number;
-  gate_10_score: number;
   entry_price: number;
   target_price?: number;
   profit_dollar?: number;
@@ -113,42 +103,17 @@ function cleanOutcomeText(status: string): string {
   return status.replace(/^(OPEN|WIN|HIT)\s*/i, "").trim();
 }
 
-function GateBarMeter({ label, score }: { label: string; score: number }) {
-  const clampedScore = Math.max(1, Math.min(14, score || 7));
-  const percentage = Math.round((clampedScore / 14) * 100);
-
-  return (
-    <div className="flex items-center justify-between text-[10px] py-1 gap-2">
-      <span className="text-zinc-400 font-medium truncate w-[110px]" title={label}>
-        {label}
-      </span>
-      <div className="flex-1 mx-2 h-[6px] bg-zinc-900 rounded-full relative overflow-hidden">
-        <div
-          className="absolute inset-0 rounded-full"
-          style={{
-            backgroundImage: "linear-gradient(to right, rgb(239 68 68) 0%, rgb(34 197 94) 100%)",
-          }}
-        />
-        <div
-          className="absolute top-0 bottom-0 right-0 bg-[#0c0c0e] transition-all duration-500 rounded-r-full"
-          style={{ width: `${100 - percentage}%` }}
-        />
-      </div>
-      <span className="text-zinc-300 font-mono w-[30px] text-right">
-        {percentage}%
-      </span>
-    </div>
-  );
-}
-
+// Updated tier priority based on the new rule: Tier 80 -> Tier 70 -> Tier 60
 const tierPriority: Record<string, number> = {
-  "75%": 4,
-  "65%": 3,
-  "55%": 2,
-  "45%": 1,
+  "80": 3,
+  "80%": 3,
+  "70": 2,
+  "70%": 2,
+  "60": 1,
+  "60%": 1,
 };
 
-const TIER_TABS = ["ALL", "75%", "65%", "55%", "45%"];
+const TIER_TABS = ["ALL", "80", "70", "60"];
 
 export default function DashboardPage() {
   const [trades, setTrades] = useState<TradeRecord[]>([]);
@@ -166,7 +131,6 @@ export default function DashboardPage() {
       const { data, error } = await supabase
         .from("stock_gate_results")
         .select("*")
-        .in("tier", ["45%", "55%", "65%", "75%"])
         .order("evaluation_date", { ascending: false });
 
       if (error) {
@@ -198,6 +162,7 @@ export default function DashboardPage() {
 
   const currentActiveDate = activeTab || dynamicTradingDates[0] || "";
 
+  // Filter trades based on the active day tab
   const dayTrades = trades.filter((trade) => {
     if (activeTab === "ALL") return true;
     return trade.evaluation_date === currentActiveDate;
@@ -205,12 +170,12 @@ export default function DashboardPage() {
 
   const tickerBestTierMap = new Map<string, { tier: string; score: number; trade: TradeRecord }>();
   dayTrades.forEach((trade) => {
-    const normalizedTier = (trade.tier || "").trim();
-    const score = tierPriority[normalizedTier] || 0;
+    const normalizedTier = (trade.tier || "").trim().replace("%", "");
+    const score = tierPriority[trade.tier?.trim()] || tierPriority[normalizedTier] || 0;
     const tickerKey = trade.ticker ?? "";
     const existing = tickerBestTierMap.get(tickerKey);
     if (!existing || score > existing.score) {
-      tickerBestTierMap.set(tickerKey, { tier: normalizedTier, score, trade });
+      tickerBestTierMap.set(tickerKey, { tier: trade.tier?.trim() || "", score, trade });
     }
   });
 
@@ -219,8 +184,8 @@ export default function DashboardPage() {
     .slice(0, 3);
 
   const filteredTrades = dayTrades.filter((trade) => {
-    const normalizedTradeTier = (trade.tier || "").trim();
-    const matchesTier = activeTierTab === "ALL" || normalizedTradeTier === activeTierTab;
+    const normalizedTradeTier = (trade.tier || "").trim().replace("%", "");
+    const matchesTier = activeTierTab === "ALL" || trade.tier?.trim() === activeTierTab || normalizedTradeTier === activeTierTab;
     const matchesSearch = (trade.ticker ?? "").toLowerCase().includes((searchTerm ?? "").toLowerCase());
     return matchesTier && matchesSearch;
   });
@@ -256,90 +221,6 @@ export default function DashboardPage() {
         </div>
       </div>
 
-      {/* Top Qualified Opportunities Section */}
-      <div className="mb-8">
-        <div className="flex items-center justify-between mb-3">
-          <h2 className="text-xs font-bold text-zinc-400 uppercase tracking-wider flex items-center gap-2">
-            <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
-            Top Quant Opportunities ({activeTab === "ALL" ? "All Days" : `${formatDayOfWeek(currentActiveDate)} - ${formatDisplayDate(currentActiveDate)}`})
-          </h2>
-        </div>
-
-        {loading ? (
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-            {[1, 2, 3].map((n) => (
-              <div key={n} className="h-[350px] bg-zinc-900/40 border border-zinc-800/80 rounded-2xl animate-pulse" />
-            ))}
-          </div>
-        ) : topStocks.length > 0 ? (
-          <div className={`grid grid-cols-1 sm:grid-cols-${Math.min(topStocks.length, 3)} gap-4`}>
-            {topStocks.map(({ tier, trade }, index) => {
-              const cleanTicker = (trade.ticker ?? "").replace(/(\d+%)$/, "").trim();
-              const targetPrice = trade.target_price ?? trade.entry_price * 1.01;
-              const profitVal = trade.profit_dollar ?? (targetPrice - trade.entry_price);
-              const statusLower = (trade.status ?? "").toLowerCase();
-              const isHit = statusLower.includes("win") || statusLower.includes("hit");
-
-              return (
-                <div
-                  key={trade.id}
-                  className="relative bg-gradient-to-br from-zinc-900/80 to-zinc-950 border border-zinc-800/80 hover:border-emerald-500/45 transition-all p-4 rounded-2xl shadow-xl flex flex-col justify-between h-[350px]"
-                >
-                  <div>
-                    <div className="grid grid-cols-3 items-center mb-2">
-                      <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 justify-self-start">
-                        TIER {tier}
-                      </span>
-                      <div className="justify-self-center w-5 h-5 rounded-full bg-emerald-500/20 border border-emerald-500/40 text-emerald-400 text-[10px] font-bold flex items-center justify-center shadow-sm">
-                        {index + 1}
-                      </div>
-                      <span className="text-[10px] text-zinc-500 justify-self-end">{formatDisplayDate(trade.evaluation_date)}</span>
-                    </div>
-
-                    <div className="flex items-baseline justify-between mb-3">
-                      <span className="text-lg font-bold font-sans text-white">{cleanTicker}</span>
-                      <span className="text-xs font-semibold text-zinc-300">+${profitVal.toFixed(2)}</span>
-                    </div>
-
-                    <div className="space-y-0.5 border-t border-zinc-800/60 pt-2 pb-1">
-                      <GateBarMeter label="G1 Open Distance" score={trade.gate_1_score} />
-                      <GateBarMeter label="G2 Premarket RVol" score={trade.gate_2_score} />
-                      <GateBarMeter label="G3 Candle Pattern" score={trade.gate_3_score} />
-                      <GateBarMeter label="G4 Candle Efficiency" score={trade.gate_4_score} />
-                      <GateBarMeter label="G5 VWAP Deviation" score={trade.gate_5_score} />
-                      <GateBarMeter label="G6 Relative Strength" score={trade.gate_6_score} />
-                      <GateBarMeter label="G7 Momentum Index" score={trade.gate_7_score} />
-                      <GateBarMeter label="G8 VWAP Slope" score={trade.gate_8_score} />
-                      <GateBarMeter label="G9 Volume Flow" score={trade.gate_9_score} />
-                      <GateBarMeter label="G10 Bar Volume Ratio" score={trade.gate_10_score} />
-                    </div>
-                  </div>
-
-                  <div className="pt-2 border-t border-zinc-800/60 flex items-center justify-between text-[11px]">
-                    <span className="text-zinc-400 truncate max-w-[130px]">{cleanOutcomeText(trade.status)}</span>
-                    <span className={`font-bold ${isHit ? "text-emerald-400" : "text-amber-400"}`}>
-                      {isHit ? "HIT" : "Waiting"}
-                    </span>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        ) : (
-          <div className="bg-gradient-to-br from-zinc-900/80 to-zinc-950 border border-zinc-800/80 rounded-2xl p-6 flex flex-col items-center justify-center text-center shadow-xl h-[350px]">
-            <div className="w-12 h-12 rounded-full bg-zinc-800/50 flex items-center justify-center mb-3 text-zinc-500 border border-zinc-700/50 shadow-inner">
-              <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-              </svg>
-            </div>
-            <p className="text-xs text-zinc-200 font-semibold font-sans tracking-wide">No Trade Recorded in this Session</p>
-            <p className="text-[11px] text-zinc-500 mt-1.5 max-w-xs leading-relaxed">
-              Market conditions did not trigger strategy criteria or no trade executions were logged for this specific timeframe.
-            </p>
-          </div>
-        )}
-      </div>
-
       {/* Main Trading Session Navigation Tabs (Last 7 Business Days + All Days) */}
       <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-8 gap-2 bg-zinc-900/40 p-2 rounded-xl border border-zinc-800/80 mb-6">
         {dynamicTabs.map((tab) => {
@@ -361,6 +242,83 @@ export default function DashboardPage() {
             </button>
           );
         })}
+      </div>
+
+      {/* Top 3 Quant Opportunities of the Day Section */}
+      <div className="mb-8">
+        <div className="flex items-center justify-between mb-3">
+          <h2 className="text-xs font-bold text-zinc-400 uppercase tracking-wider flex items-center gap-2">
+            <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+            Top 3 Opportunities ({activeTab === "ALL" ? "All Days" : `${formatDayOfWeek(currentActiveDate)} - ${formatDisplayDate(currentActiveDate)}`})
+          </h2>
+        </div>
+
+        {loading ? (
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+            {[1, 2, 3].map((n) => (
+              <div key={n} className="h-[220px] bg-zinc-900/40 border border-zinc-800/80 rounded-2xl animate-pulse" />
+            ))}
+          </div>
+        ) : topStocks.length > 0 ? (
+          <div className={`grid grid-cols-1 sm:grid-cols-${Math.min(topStocks.length, 3)} gap-4`}>
+            {topStocks.map(({ tier, trade }, index) => {
+              const cleanTicker = (trade.ticker ?? "").replace(/(\d+%)$/, "").trim();
+              const targetPrice = trade.target_price ?? trade.entry_price * 1.01;
+              const profitVal = trade.profit_dollar ?? (targetPrice - trade.entry_price);
+              const statusLower = (trade.status ?? "").toLowerCase();
+              const isHit = statusLower.includes("win") || statusLower.includes("hit");
+
+              return (
+                <div
+                  key={trade.id}
+                  className="relative bg-gradient-to-br from-zinc-900/80 to-zinc-950 border border-zinc-800/80 hover:border-emerald-500/45 transition-all p-5 rounded-2xl shadow-xl flex flex-col justify-between"
+                >
+                  <div>
+                    <div className="grid grid-cols-3 items-center mb-3">
+                      <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 justify-self-start">
+                        TIER {tier}
+                      </span>
+                      <div className="justify-self-center w-5 h-5 rounded-full bg-emerald-500/20 border border-emerald-500/40 text-emerald-400 text-[10px] font-bold flex items-center justify-center shadow-sm">
+                        {index + 1}
+                      </div>
+                      <span className="text-[10px] text-zinc-500 justify-self-end">{formatDisplayDate(trade.evaluation_date)}</span>
+                    </div>
+
+                    <div className="flex items-baseline justify-between mb-4">
+                      <span className="text-lg font-bold font-sans text-white">{cleanTicker}</span>
+                      <span className="text-xs font-semibold text-emerald-400">+${profitVal.toFixed(2)}</span>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-2 bg-zinc-950/60 p-3 rounded-xl border border-zinc-800/60 mb-3 text-xs">
+                      <div>
+                        <div className="text-[10px] text-zinc-500">ENTRY PRICE</div>
+                        <div className="font-mono text-zinc-200 mt-0.5">${trade.entry_price.toFixed(2)}</div>
+                      </div>
+                      <div>
+                        <div className="text-[10px] text-zinc-500">TARGET PRICE</div>
+                        <div className="font-mono text-emerald-400 mt-0.5">${targetPrice.toFixed(2)}</div>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="pt-3 border-t border-zinc-800/60 flex items-center justify-between text-xs">
+                    <span className="text-zinc-400 truncate max-w-[130px]">{cleanOutcomeText(trade.status) || "—"}</span>
+                    <span className={`font-bold ${isHit ? "text-emerald-400" : "text-amber-400"}`}>
+                      {isHit ? "HIT" : "Waiting"}
+                    </span>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        ) : (
+          <div className="bg-gradient-to-br from-zinc-900/80 to-zinc-950 border border-zinc-800/80 rounded-2xl p-6 flex flex-col items-center justify-center text-center shadow-xl h-[200px]">
+            <p className="text-xs text-zinc-200 font-semibold font-sans tracking-wide">No Trade Recorded in this Session</p>
+            <p className="text-[11px] text-zinc-500 mt-1.5 max-w-xs leading-relaxed">
+              Market conditions did not trigger strategy criteria or no trade executions were logged for this specific timeframe.
+            </p>
+          </div>
+        )}
       </div>
 
       {/* Data Table Card */}
