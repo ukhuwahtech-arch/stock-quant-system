@@ -6,7 +6,7 @@ import { createClientComponentClient } from "../../utils/supabase/client";
 const supabase = createClientComponentClient();
 
 interface TradeRecord {
-  id: number;
+  id: number | string;
   date: string;
   ticker: string;
   Tier?: string;
@@ -200,17 +200,17 @@ export default function DashboardPage() {
       if (error) {
         console.error("Error fetching trades from Supabase:", error);
       } else {
-        const fetchedTrades = (data || []).map((row: any) => ({
+        const fetchedTrades: TradeRecord[] = (data || []).map((row: any) => ({
           id: row.id || `${row.Date}_${row.Ticker}`,
-          date: row.Date,
-          ticker: row.Ticker,
+          date: row.Date || "",
+          ticker: row.Ticker || "",
           Tier: row.Tier,
           RVOL: row.RVOL ? Number(row.RVOL) : 0,
           "Gap %": row["Gap %"],
-          "BASE PRICE": row["BASE PRICE"],
-          "TARGET PRICE": row["TARGET PRICE"],
+          "BASE PRICE": row["BASE PRICE"] || 0,
+          "TARGET PRICE": row["TARGET PRICE"] || 0,
           PROFIT: row.PROFIT,
-          STATUS: row.STATUS,
+          STATUS: row.STATUS || "",
           "HIT TIME": row["HIT TIME"],
           "HIT DAY": row["HIT DAY"],
           spy_open: row.spy_open,
@@ -228,10 +228,12 @@ export default function DashboardPage() {
         }));
         setTrades(fetchedTrades);
 
-        // Find the latest trading date available in the database
-        if (fetchedTrades.length > 0 && fetchedTrades[0].date) {
-          const latestDateStr = fetchedTrades[0].date;
-          const [lYear, lMonth] = latestDateStr.split("-").map(Number);
+        // Find the latest trading date available in the database safely
+        const latestDateStr = fetchedTrades[0]?.date;
+        if (fetchedTrades.length > 0 && latestDateStr) {
+          const parts = latestDateStr.split("-").map(Number);
+          const lYear = parts[0] ?? today.getFullYear();
+          const lMonth = parts[1] ?? (today.getMonth() + 1);
           const lYearNum = lYear;
           const lMonthIdx = lMonth - 1;
 
@@ -335,8 +337,8 @@ export default function DashboardPage() {
   const pctVal = parseFloat(calcPercent) || 0;
   const calcResult = pVal + (pVal * pctVal) / 100;
 
-  // Representative market stats from the currently scoped/filtered trades for the selected date
-  const sampleMarketRecord = filteredTrades[0] || trades[0] || {};
+  // Representative market stats safely accessed using optional chaining
+  const sampleMarketRecord: Partial<TradeRecord> = filteredTrades[0] || trades[0] || {};
   const spyOpen = sampleMarketRecord.spy_open !== undefined && sampleMarketRecord.spy_open !== null ? Number(sampleMarketRecord.spy_open).toFixed(2) : "—";
   const spyClose = sampleMarketRecord.spy_close !== undefined && sampleMarketRecord.spy_close !== null ? Number(sampleMarketRecord.spy_close).toFixed(2) : "—";
   const spyPct = sampleMarketRecord.spy_pct_change !== undefined && sampleMarketRecord.spy_pct_change !== null ? Number(sampleMarketRecord.spy_pct_change).toFixed(2) : "0.00";
