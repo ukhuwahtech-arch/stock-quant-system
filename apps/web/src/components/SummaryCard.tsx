@@ -8,7 +8,6 @@ interface SummaryCardProps {
 }
 
 export default function SummaryCard({
-  mainTab = "Week",
   summaryStats,
   metricFilter = "ALL",
   onSelectMetricFilter,
