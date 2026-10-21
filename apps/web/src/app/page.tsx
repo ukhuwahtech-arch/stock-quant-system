@@ -111,6 +111,7 @@ export default function DashboardPage() {
 
   const [activeTierTab, setActiveTierTab] = useState<string>("ALL");
   const [metricFilter, setMetricFilter] = useState<string>("ALL");
+  const [selectedTicker, setSelectedTicker] = useState<string>("");
 
   // Paginated fetch to bypass Supabase 1000-row limit
   useEffect(() => {
@@ -335,10 +336,70 @@ export default function DashboardPage() {
     return true;
   });
 
-  // 1. Tier Tab Filter
+  // Dynamic Summary Stats Calculation if a Ticker is Selected
+  const activeSummaryStats = (() => {
+    if (!selectedTicker) return summaryStats;
+    const tickerScoped = scopedTrades.filter(t => String(t.ticker || "").toUpperCase() === selectedTicker.toUpperCase());
+    
+    const calcForRank = (rankNum: number) => {
+      const rTrades = tickerScoped.filter(t => parseInt(String(t.rank || "99").replace("#", ""), 10) === rankNum);
+      const pass = rTrades.filter(t => {
+        const tierNum = parseInt(String(t.tier || "0").replace("%", ""), 10);
+        const vwapStr = String(t.vwap_pass || "").trim().toLowerCase();
+        return tierNum >= 40 && (vwapStr === "yes" || vwapStr === "true" || vwapStr === "1");
+      });
+      const hit = pass.filter(t => {
+        const status = String(t.status || "").trim().toUpperCase();
+        return status === "HIT" || status.includes("HIT");
+      });
+      const hold = pass.filter(t => {
+        const status = String(t.status || "").trim().toUpperCase();
+        return status === "HOLD" || status.includes("HOLD");
+      });
+      return { total: rTrades.length, pass: pass.length, hit: hit.length, hold: hold.length };
+    };
+
+    const overallPass = tickerScoped.filter(t => {
+      const tierNum = parseInt(String(t.tier || "0").replace("%", ""), 10);
+      const vwapStr = String(t.vwap_pass || "").trim().toLowerCase();
+      return tierNum >= 40 && (vwapStr === "yes" || vwapStr === "true" || vwapStr === "1");
+    });
+    const overallHit = overallPass.filter(t => String(t.status || "").trim().toUpperCase().includes("HIT"));
+    const overallHold = overallPass.filter(t => String(t.status || "").trim().toUpperCase().includes("HOLD"));
+
+    const r1 = calcForRank(1);
+    const r2 = calcForRank(2);
+    const r3 = calcForRank(3);
+
+    return {
+      total_trade: tickerScoped.length,
+      trades_pass_tier_vwap: overallPass.length,
+      pass_trade_hit: overallHit.length,
+      pass_trade_hold: overallHold.length,
+      total_trade_top_1_rank: r1.total,
+      trades_pass_tier_vwap_1_rank: r1.pass,
+      pass_trade_hit_1_rank: r1.hit,
+      pass_trade_hold_1_rank: r1.hold,
+      total_trade_top_2_rank: r2.total,
+      trades_pass_tier_vwap_2_rank: r2.pass,
+      pass_trade_hit_2_rank: r2.hit,
+      pass_trade_hold_2_rank: r2.hold,
+      total_trade_top_3_rank: r3.total,
+      trades_pass_tier_vwap_3_rank: r3.pass,
+      pass_trade_hit_3_rank: r3.hit,
+      pass_trade_hold_3_rank: r3.hold,
+    };
+  })();
+
+  // 1. Tier & Ticker Filter for Ticker Table
   let filteredTrades = scopedTrades.filter((trade) => {
     const tierVal = trade.tier || "0%";
-    return activeTierTab === "ALL" || tierVal.trim() === activeTierTab || tierVal.trim().replace("%", "") === activeTierTab;
+    const tickerVal = (trade.ticker || "").toUpperCase();
+    
+    const matchesTier = activeTierTab === "ALL" || tierVal.trim() === activeTierTab || tierVal.trim().replace("%", "") === activeTierTab;
+    const matchesTicker = !selectedTicker || tickerVal === selectedTicker.toUpperCase();
+
+    return matchesTier && matchesTicker;
   });
 
   // 2. Summary Metric Box Click Filter logic
@@ -472,6 +533,8 @@ export default function DashboardPage() {
     (t) => t.ticker?.toUpperCase() === "NVDA" && t.date === currentActiveDate
   ) || masterTrades.find((t) => t.ticker?.toUpperCase() === "NVDA") || {};
 
+  const availableTickersList = Array.from(new Set(masterTrades.map(t => String(t.ticker || "").toUpperCase()))).filter(Boolean).sort();
+
   return (
     <main className="min-h-screen bg-[#09090b] text-zinc-100 font-mono p-6 lg:p-10">
       {/* Header & Main Navigation Tabs */}
@@ -543,12 +606,14 @@ export default function DashboardPage() {
       {/* Complete Card Stack */}
       <IndexMarketCard marketRecord={nvdaMarketRecord} />
       
-      {/* Pass metric filter setter to SummaryCard so clicking boxes updates the view */}
+      {/* Pass metric filter & ticker filter setters to SummaryCard */}
       <SummaryCard 
-        mainTab={mainTab} 
-        summaryStats={summaryStats} 
+        summaryStats={activeSummaryStats} 
         metricFilter={metricFilter}
         onSelectMetricFilter={setMetricFilter}
+        selectedTicker={selectedTicker}
+        onSelectTicker={setSelectedTicker}
+        availableTickers={availableTickersList}
       />
 
       <MultiTickersCard
